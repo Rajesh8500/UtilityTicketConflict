@@ -1,0 +1,10 @@
+.env
+.env.*.local
+node_modules/
+**/node_modules/
+backend/dist/
+backend/coverage/
+frontend/dist/
+frontend/coverage/
+*.log
+*.tsbuildinfo

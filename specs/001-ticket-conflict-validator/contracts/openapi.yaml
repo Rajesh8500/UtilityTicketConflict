@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: Utility Ticket Conflict API
+  version: 1.0.0
+  description: Bbox-filtered ticket search with service-area, emergency, and risk details.
+servers:
+  - url: http://localhost:3000/api
+paths:
+  /tickets/conflicts:
+    get:
+      operationId: getTicketConflicts
+      summary: Search tickets and evaluate risk
+      description: >-
+        Returns only tickets intersecting bbox and matching supplied optional filters.
+        Emergency proximity candidates are searched across all tickets, independently
+        of bbox, stationCode, and utilityType filters.
+      parameters:
+        - name: bbox
+          in: query
+          required: true
+          description: >-
+            Four finite WGS84 numbers as minLng,minLat,maxLng,maxLat. Longitude must
+            be in [-180,180], latitude in [-90,90], and each minimum must be less
+            than its maximum. Antimeridian-wrapping boxes are unsupported.
+          schema:
+            type: string
+            pattern: '^\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*,\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*,\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*,\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*$'
+          example: '-80.00,43.18,-79.65,43.38'
+        - name: stationCode
+          in: query
+          required: false
+          description: Exact station code match; an unknown valid value yields no tickets.
+          schema:
+            type: string
+          example: HLTNW02
+        - name: utilityType
+          in: query
+          required: false
+          description: Exact utility type match; an unknown valid value yields no tickets.
+          schema:
+            type: string
+          example: WATER
+        - name: radiusMeters
+          in: query
+          required: false
+          description: >-
+            Positive finite emergency search distance in meters. Defaults to 250 when
+            omitted. No product-level maximum is imposed.
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            default: 250
+          example: 250
+      responses:
+        '200':
+          description: Filtered tickets and a summary calculated from those same tickets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictResponse'
+        '400':
+          description: Missing or invalid bbox or invalid radiusMeters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                statusCode: 400
+                error: Bad Request
+                message:
+                  - bbox must contain four finite WGS84 coordinates in minLng,minLat,maxLng,maxLat order
+        '500':
+          description: Unexpected server error; response must not expose credentials, SQL details, or stack traces.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerError'
+components:
+  schemas:
+    ConflictResponse:
+      type: object
+      required: [tickets, summary]
+      properties:
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        summary:
+          $ref: '#/components/schemas/Summary'
+    Ticket:
+      type: object
+      required:
+        - id
+        - ticketNo
+        - status
+        - priority
+        - stationCode
+        - utilityType
+        - longitude
+        - latitude
+        - insideServiceArea
+        - nearestEmergencyTicketNo
+        - distanceToNearestEmergencyMeters
+        - riskLevel
+      properties:
+        id:
+          type: integer
+        ticketNo:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+        stationCode:
+          type: [string, 'null']
+        utilityType:
+          type: [string, 'null']
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        insideServiceArea:
+          type: boolean
+        nearestEmergencyTicketNo:
+          type: [string, 'null']
+        distanceToNearestEmergencyMeters:
+          type: [number, 'null']
+          minimum: 0
+        riskLevel:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+    Summary:
+      type: object
+      required: [total, highRisk, mediumRisk, lowRisk, outsideServiceArea, byUtilityType]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        highRisk:
+          type: integer
+          minimum: 0
+        mediumRisk:
+          type: integer
+          minimum: 0
+        lowRisk:
+          type: integer
+          minimum: 0
+        outsideServiceArea:
+          type: integer
+          minimum: 0
+        byUtilityType:
+          type: object
+          description: >-
+            Counts for non-null utility types represented by returned tickets only.
+            An empty ticket result has an empty object for this field.
+          additionalProperties:
+            type: integer
+            minimum: 0
+    ValidationError:
+      type: object
+      required: [statusCode, error, message]
+      properties:
+        statusCode:
+          const: 400
+        error:
+          const: Bad Request
+        message:
+          type: array
+          items:
+            type: string
+            description: Identifies an invalid query field and explains its validation failure.
+    ServerError:
+      type: object
+      required: [statusCode, error, message]
+      properties:
+        statusCode:
+          const: 500
+        error:
+          type: string
+        message:
+          type: string
+          description: Generic client-facing message without SQL details, credentials, or stack traces.

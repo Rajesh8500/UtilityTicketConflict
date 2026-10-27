@@ -1,0 +1,11 @@
+{
+  "rootDir": "..",
+  "testRegex": ".*\\.integration\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
+  },
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "setupFiles": ["reflect-metadata"],
+  "testEnvironment": "node",
+  "testTimeout": 30000
+}
